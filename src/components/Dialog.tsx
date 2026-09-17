@@ -5,9 +5,10 @@ interface DialogProps {
   title: string
   onClose: () => void
   children: ReactNode
+  wide?: boolean
 }
 
-export function Dialog({ title, onClose, children }: DialogProps) {
+export function Dialog({ title, onClose, children, wide = false }: DialogProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -27,7 +28,12 @@ export function Dialog({ title, onClose, children }: DialogProps) {
         }
       }}
     >
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={title}>
+      <div
+        className={`dialog${wide ? ' dialog--wide' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <h2 className="dialog__title">{title}</h2>
         {children}
       </div>

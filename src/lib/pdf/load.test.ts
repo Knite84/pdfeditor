@@ -29,6 +29,7 @@ describe('createPdfSource', () => {
     const source = await createPdfSource(file)
 
     expect(source.kind).toBe('pdf')
+    expect(source.mimeType).toBe('application/pdf')
     expect(source.name).toBe('three.pdf')
     expect(source.pageCount).toBe(3)
     expect(source.bytes.byteLength).toBeGreaterThan(0)

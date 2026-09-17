@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { AddPdfDialog } from './components/AddPdfDialog'
 import { DropZone } from './components/DropZone'
+import { PageDetailDialog } from './components/PageDetailDialog'
 import { PageGrid } from './components/PageGrid'
+import { SignatureDialog } from './components/SignatureDialog'
 import { SplitDialog } from './components/SplitDialog'
 import { Toolbar } from './components/Toolbar'
 import { useFileDrop } from './hooks/useFileDrop'
@@ -20,13 +22,22 @@ export default function App() {
   const dismissError = useDocumentStore((state) => state.dismissError)
   const exportDocument = useDocumentStore((state) => state.exportDocument)
   const splitDocument = useDocumentStore((state) => state.splitDocument)
+  const imagePageSize = useDocumentStore((state) => state.imagePageSize)
+  const setImagePageSize = useDocumentStore((state) => state.setImagePageSize)
+  const signatures = useDocumentStore((state) => state.signatures)
+  const placingSignatureId = useDocumentStore((state) => state.placingSignatureId)
+  const setPlacingSignatureId = useDocumentStore((state) => state.setPlacingSignatureId)
 
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [splitDialogOpen, setSplitDialogOpen] = useState(false)
+  const [signatureDialogOpen, setSignatureDialogOpen] = useState(false)
+  const [detailPageId, setDetailPageId] = useState<string | null>(null)
   const { isDragging, handlers } = useFileDrop((files) => void addFiles(files))
 
   const hasPages = pages.length > 0
   const pageLabel = `${pages.length} ${pages.length === 1 ? 'page' : 'pages'}`
+  const placingSignature =
+    signatures.find((signature) => signature.id === placingSignatureId) ?? null
   let status: string | null = null
   if (isExporting) {
     status = 'Exporting…'
@@ -37,9 +48,16 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
+      if (event.key === 'Escape') {
+        useDocumentStore.getState().setPlacingSignatureId(null)
+        return
+      }
       if (
         target &&
-        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable ||
+          target.closest('.signature-overlay'))
       ) {
         return
       }
@@ -90,9 +108,31 @@ export default function App() {
               <button
                 type="button"
                 className="button button--ghost"
+                onClick={() => setSignatureDialogOpen(true)}
+                title="Draw or upload signatures, then place them on pages"
+              >
+                Signatures
+              </button>
+              <label className="app__select-label" title="Page size used for image pages">
+                Image page
+                <select
+                  className="select"
+                  aria-label="Image page size"
+                  value={imagePageSize}
+                  onChange={(event) =>
+                    setImagePageSize(event.target.value === 'letter' ? 'letter' : 'a4')
+                  }
+                >
+                  <option value="a4">A4</option>
+                  <option value="letter">Letter</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className="button button--ghost"
                 onClick={() => setAddDialogOpen(true)}
               >
-                Add PDF
+                Add files
               </button>
               <button
                 type="button"
@@ -120,10 +160,25 @@ export default function App() {
         {hasPages ? (
           <>
             <Toolbar onSplit={() => setSplitDialogOpen(true)} />
-            <PageGrid />
+            {placingSignature ? (
+              <div className="place-banner" role="status">
+                <span>
+                  Click a page to place “{placingSignature.name}”. Drag to move it afterwards.
+                </span>
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={() => setPlacingSignatureId(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : null}
+            <PageGrid onZoom={setDetailPageId} />
             <p className="app__hint">
               Click to select, Shift-click for a range, Ctrl/Cmd-click to toggle. Drag to
-              reorder, Delete to remove. Drop more PDFs anywhere to append their pages.
+              reorder, Delete to remove, double-click to zoom. Drop more PDFs or images
+              anywhere to append their pages.
             </p>
           </>
         ) : (
@@ -145,6 +200,16 @@ export default function App() {
           pageCount={pages.length}
           onClose={() => setSplitDialogOpen(false)}
           onConfirm={handleSplitConfirm}
+        />
+      ) : null}
+      {signatureDialogOpen ? (
+        <SignatureDialog onClose={() => setSignatureDialogOpen(false)} />
+      ) : null}
+      {detailPageId ? (
+        <PageDetailDialog
+          pageId={detailPageId}
+          onClose={() => setDetailPageId(null)}
+          onNavigate={setDetailPageId}
         />
       ) : null}
     </div>

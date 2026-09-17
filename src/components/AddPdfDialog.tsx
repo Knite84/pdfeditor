@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 
+import { IMAGE_ACCEPT } from '../lib/images/convert'
 import { useDocumentStore } from '../state/documentStore'
 import type { InsertPosition } from '../state/documentStore'
 import { Dialog } from './Dialog'
@@ -22,7 +23,7 @@ export function AddPdfDialog({ onClose, onConfirm }: AddPdfDialogProps) {
   const canConfirm = files.length > 0
 
   return (
-    <Dialog title="Add PDF" onClose={onClose}>
+    <Dialog title="Add files" onClose={onClose}>
       <button
         type="button"
         className="button button--ghost"
@@ -30,13 +31,13 @@ export function AddPdfDialog({ onClose, onConfirm }: AddPdfDialogProps) {
       >
         {files.length > 0
           ? `${files.length} ${files.length === 1 ? 'file' : 'files'} chosen`
-          : 'Choose PDF files'}
+          : 'Choose PDF or image files'}
       </button>
       <input
         ref={inputRef}
         className="visually-hidden"
         type="file"
-        accept="application/pdf,.pdf"
+        accept={IMAGE_ACCEPT}
         multiple
         onChange={(event) => {
           handleFiles(event.target.files)

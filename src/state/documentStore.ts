@@ -8,9 +8,17 @@ import {
   suggestBaseName,
   suggestFileName,
 } from '../lib/pdf/export'
+import { createImageSource, isImageFile } from '../lib/images/load'
 import { createPdfSource, isPdfFile } from '../lib/pdf/load'
 import { revokeAllThumbnails } from '../lib/pdf/pdfjs'
-import type { PageRef, Source } from '../types'
+import { revokeAllSignatureUrls, revokeSignatureUrl } from '../lib/signatures/assets'
+import type {
+  ImagePageSize,
+  PageRef,
+  SignatureAsset,
+  SignaturePlacement,
+  Source,
+} from '../types'
 
 export type SelectMode = 'replace' | 'toggle' | 'range'
 
@@ -18,6 +26,41 @@ export type InsertPosition = 'end' | 'start' | 'after-selection'
 
 export interface AddFilesOptions {
   position?: InsertPosition
+}
+
+export interface SignatureInput {
+  name: string
+  pngBytes: ArrayBuffer
+  width: number
+  height: number
+}
+
+export interface PlacementRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+function clampFraction(value: number): number {
+  if (!(value >= 0)) {
+    return 0
+  }
+  if (value > 1) {
+    return 1
+  }
+  return value
+}
+
+function clampRect(rect: PlacementRect): PlacementRect {
+  const width = Math.min(1, Math.max(0.02, rect.width))
+  const height = Math.min(1, Math.max(0.02, rect.height))
+  return {
+    x: clampFraction(Math.min(rect.x, 1 - width)),
+    y: clampFraction(Math.min(rect.y, 1 - height)),
+    width,
+    height,
+  }
 }
 
 interface DocumentState {
@@ -28,9 +71,11 @@ interface DocumentState {
   isLoading: boolean
   isExporting: boolean
   error: string | null
+  imagePageSize: ImagePageSize
   addFiles: (files: File[], options?: AddFilesOptions) => Promise<void>
   clear: () => Promise<void>
   dismissError: () => void
+  setImagePageSize: (size: ImagePageSize) => void
   exportDocument: () => Promise<void>
   exportSelected: () => Promise<void>
   splitDocument: (chunkSize: number) => Promise<void>
@@ -40,6 +85,16 @@ interface DocumentState {
   removeSelected: () => void
   rotateSelected: (degrees: number) => void
   reorderPages: (activeId: string, overId: string) => void
+  signatures: SignatureAsset[]
+  placements: SignaturePlacement[]
+  placingSignatureId: string | null
+  setPlacingSignatureId: (id: string | null) => void
+  addSignature: (input: SignatureInput) => string
+  removeSignature: (id: string) => void
+  placeSignature: (pageId: string, signatureId: string, rect: PlacementRect) => void
+  movePlacement: (id: string, x: number, y: number) => void
+  resizePlacement: (id: string, width: number, height: number) => void
+  removePlacement: (id: string) => void
 }
 
 function normalizeRotation(degrees: number): number {
@@ -69,22 +124,29 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   isLoading: false,
   isExporting: false,
   error: null,
+  imagePageSize: 'a4',
+  signatures: [],
+  placements: [],
+  placingSignatureId: null,
 
   addFiles: async (files, options) => {
     const pdfs: File[] = []
+    const images: File[] = []
     const rejected: string[] = []
     for (const file of files) {
       if (isPdfFile(file)) {
         pdfs.push(file)
+      } else if (isImageFile(file)) {
+        images.push(file)
       } else {
         rejected.push(file.name)
       }
     }
 
-    if (pdfs.length === 0) {
+    if (pdfs.length === 0 && images.length === 0) {
       if (rejected.length > 0) {
         set({
-          error: `Only PDF files can be opened right now. Skipped: ${rejected.join(', ')}.`,
+          error: `Only PDF and image files can be opened. Skipped: ${rejected.join(', ')}.`,
         })
       }
       return
@@ -96,9 +158,11 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     const addedPages: PageRef[] = []
     const failures: string[] = []
 
-    for (const file of pdfs) {
+    for (const file of [...pdfs, ...images]) {
       try {
-        const source = await createPdfSource(file)
+        const source = isPdfFile(file)
+          ? await createPdfSource(file)
+          : await createImageSource(file)
         loaded.push(source)
         for (let index = 0; index < source.pageCount; index += 1) {
           addedPages.push({
@@ -114,7 +178,9 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     }
 
     if (rejected.length > 0) {
-      failures.push(`Skipped (not a PDF): ${rejected.join(', ')}.`)
+      failures.push(
+        `Skipped (supports PDF, JPG, PNG, WebP and HEIC): ${rejected.join(', ')}.`,
+      )
     }
 
     const position = options?.position ?? 'end'
@@ -157,6 +223,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   clear: async () => {
     await revokeAllThumbnails()
     clearExportCache()
+    revokeAllSignatureUrls()
     set({
       sources: {},
       pages: [],
@@ -165,19 +232,28 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       error: null,
       isLoading: false,
       isExporting: false,
+      signatures: [],
+      placements: [],
+      placingSignatureId: null,
     })
   },
 
   dismissError: () => set({ error: null }),
 
+  setImagePageSize: (size) => set({ imagePageSize: size }),
+
   exportDocument: async () => {
-    const { pages, sources, isExporting } = get()
+    const { pages, sources, isExporting, imagePageSize, placements, signatures } = get()
     if (pages.length === 0 || isExporting) {
       return
     }
     set({ isExporting: true, error: null })
     try {
-      const bytes = await buildPdf(pages, sources)
+      const bytes = await buildPdf(pages, sources, {
+        imagePageSize,
+        placements,
+        signatures: Object.fromEntries(signatures.map((asset) => [asset.id, asset])),
+      })
       downloadPdf(bytes, suggestFileName(pages, sources))
       set({ isExporting: false })
     } catch (error) {
@@ -189,7 +265,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   exportSelected: async () => {
-    const { pages, sources, selectedIds, isExporting } = get()
+    const { pages, sources, selectedIds, isExporting, imagePageSize, placements, signatures } =
+      get()
     if (selectedIds.length === 0 || isExporting) {
       return
     }
@@ -197,7 +274,11 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     const subset = pages.filter((page) => selected.has(page.id))
     set({ isExporting: true, error: null })
     try {
-      const bytes = await buildPdf(subset, sources)
+      const bytes = await buildPdf(subset, sources, {
+        imagePageSize,
+        placements,
+        signatures: Object.fromEntries(signatures.map((asset) => [asset.id, asset])),
+      })
       downloadPdf(bytes, suggestFileName(subset, sources, 'extract'))
       set({ isExporting: false })
     } catch (error) {
@@ -209,7 +290,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   splitDocument: async (chunkSize) => {
-    const { pages, sources, isExporting } = get()
+    const { pages, sources, isExporting, imagePageSize, placements, signatures } = get()
     const size = Math.floor(chunkSize)
     if (isExporting) {
       return
@@ -229,7 +310,11 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       }
       const base = suggestBaseName(pages, sources)
       for (let index = 0; index < chunks.length; index += 1) {
-        const bytes = await buildPdf(chunks[index], sources)
+        const bytes = await buildPdf(chunks[index], sources, {
+          imagePageSize,
+          placements,
+          signatures: Object.fromEntries(signatures.map((asset) => [asset.id, asset])),
+        })
         downloadPdf(bytes, `${base}-part-${index + 1}-of-${chunks.length}.pdf`)
         if (index < chunks.length - 1) {
           await new Promise((resolve) => {
@@ -289,6 +374,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       const removeIds = new Set(state.selectedIds)
       return {
         pages: state.pages.filter((page) => !removeIds.has(page.id)),
+        placements: state.placements.filter((placement) => !removeIds.has(placement.pageId)),
         selectedIds: [],
         lastSelectedId: null,
       }
@@ -335,4 +421,72 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
       return { pages: moveGroup(state.pages, new Set(selectedIds), overId) }
     }),
+
+  setPlacingSignatureId: (id) => set({ placingSignatureId: id }),
+
+  addSignature: (input) => {
+    const id = createId()
+    set((state) => ({
+      signatures: [
+        ...state.signatures,
+        { id, name: input.name, pngBytes: input.pngBytes, width: input.width, height: input.height },
+      ],
+    }))
+    return id
+  },
+
+  removeSignature: (id) =>
+    set((state) => {
+      revokeSignatureUrl(id)
+      return {
+        signatures: state.signatures.filter((signature) => signature.id !== id),
+        placements: state.placements.filter((placement) => placement.signatureId !== id),
+        placingSignatureId: state.placingSignatureId === id ? null : state.placingSignatureId,
+      }
+    }),
+
+  placeSignature: (pageId, signatureId, rect) =>
+    set((state) => {
+      const pageExists = state.pages.some((page) => page.id === pageId)
+      const signatureExists = state.signatures.some((signature) => signature.id === signatureId)
+      if (!pageExists || !signatureExists) {
+        return {}
+      }
+      const clamped = clampRect(rect)
+      return {
+        placements: [
+          ...state.placements,
+          { id: createId(), pageId, signatureId, ...clamped },
+        ],
+      }
+    }),
+
+  movePlacement: (id, x, y) =>
+    set((state) => ({
+      placements: state.placements.map((placement) =>
+        placement.id === id
+          ? {
+              ...placement,
+              x: clampFraction(Math.min(x, 1 - placement.width)),
+              y: clampFraction(Math.min(y, 1 - placement.height)),
+            }
+          : placement,
+      ),
+    })),
+
+  resizePlacement: (id, width, height) =>
+    set((state) => ({
+      placements: state.placements.map((placement) => {
+        if (placement.id !== id) {
+          return placement
+        }
+        const next = clampRect({ x: placement.x, y: placement.y, width, height })
+        return { ...placement, ...next }
+      }),
+    })),
+
+  removePlacement: (id) =>
+    set((state) => ({
+      placements: state.placements.filter((placement) => placement.id !== id),
+    })),
 }))

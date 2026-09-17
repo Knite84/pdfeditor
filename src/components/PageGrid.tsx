@@ -18,7 +18,11 @@ import type { SelectMode } from '../state/documentStore'
 import { PageThumb } from './PageThumb'
 import type { SelectEvent } from './PageThumb'
 
-export function PageGrid() {
+interface PageGridProps {
+  onZoom: (id: string) => void
+}
+
+export function PageGrid({ onZoom }: PageGridProps) {
   const pages = useDocumentStore((state) => state.pages)
   const sources = useDocumentStore((state) => state.sources)
   const selectedIds = useDocumentStore((state) => state.selectedIds)
@@ -77,6 +81,7 @@ export function PageGrid() {
                 rotation={page.rotation}
                 selected={selectedIds.includes(page.id)}
                 onSelect={handleSelect}
+                onZoom={onZoom}
               />
             )
           })}

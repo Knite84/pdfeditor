@@ -33,5 +33,6 @@ export async function createPdfSource(file: File): Promise<Source> {
     name: file.name,
     bytes,
     pageCount: document.getPageCount(),
+    mimeType: 'application/pdf',
   }
 }

@@ -49,6 +49,29 @@
   color: var(--color-text-muted);
 }
 
+.app__select-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.select {
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  color: var(--color-text);
+  background-color: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.select:hover {
+  background-color: var(--color-surface-sunken);
+}
+
 .app__badge {
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-xs);
@@ -321,11 +344,33 @@
   flex-direction: column;
   gap: var(--space-4);
   width: min(420px, 100%);
+  max-height: calc(100vh - var(--space-6));
+  overflow-y: auto;
   padding: var(--space-5);
   background-color: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+}
+
+.dialog--wide {
+  width: min(880px, 100%);
+}
+
+.page-detail__nav {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.page-detail__canvas {
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.page-detail__canvas .page-thumb__canvas {
+  max-width: 760px;
 }
 
 .dialog__title {
@@ -389,6 +434,163 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
+}
+
+/* Signatures -------------------------------------------------------------- */
+
+.page-thumb__canvas {
+  position: relative;
+  width: 100%;
+}
+
+.page-thumb--placing .page-thumb__canvas {
+  cursor: copy;
+}
+
+.signature-overlay {
+  position: absolute;
+  cursor: move;
+  touch-action: none;
+  border: 1px dashed transparent;
+  border-radius: var(--radius-sm);
+}
+
+.signature-overlay:hover,
+.signature-overlay:focus-within {
+  border-color: var(--color-accent);
+}
+
+.signature-overlay__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.signature-overlay__delete {
+  position: absolute;
+  top: -11px;
+  right: -11px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: var(--text-sm);
+  line-height: 1;
+  color: var(--color-accent-text);
+  background-color: var(--color-accent);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.signature-overlay:hover .signature-overlay__delete,
+.signature-overlay:focus-within .signature-overlay__delete {
+  opacity: 1;
+}
+
+.signature-overlay__handle {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  background-color: var(--color-accent);
+  border: 2px solid var(--color-surface-raised);
+  border-radius: 4px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.place-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+
+.signature-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.signature-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.signature-list__preview {
+  width: 120px;
+  height: 44px;
+  object-fit: contain;
+  background-color: var(--color-surface-raised);
+  background-image:
+    linear-gradient(45deg, var(--color-surface-sunken) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--color-surface-sunken) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--color-surface-sunken) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--color-surface-sunken) 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.signature-list__name {
+  flex: 1;
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signature-pad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.signature-pad__canvas {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-raised);
+  background-image:
+    linear-gradient(45deg, var(--color-surface-sunken) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--color-surface-sunken) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--color-surface-sunken) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--color-surface-sunken) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.signature-pad__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.dialog__error {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
 }
 
 /* Drag overlay ------------------------------------------------------------ */

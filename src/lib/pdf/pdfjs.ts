@@ -2,6 +2,7 @@ import * as pdfjs from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
+import { renderImageThumbnail } from '../images/thumbnail'
 import type { Source } from '../../types'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
@@ -78,7 +79,10 @@ export function getPageThumbnail(
   const key = `${source.id}:${pageIndex}:${Math.round(width * dpr)}:${normalizedRotation}`
   let pending = thumbnailCache.get(key)
   if (!pending) {
-    pending = renderThumbnail(source, pageIndex, width, dpr, normalizedRotation)
+    pending =
+      source.kind === 'image'
+        ? renderImageThumbnail(source, width, dpr, normalizedRotation)
+        : renderThumbnail(source, pageIndex, width, dpr, normalizedRotation)
     thumbnailCache.set(key, pending)
     trackKey(source.id, key)
   }

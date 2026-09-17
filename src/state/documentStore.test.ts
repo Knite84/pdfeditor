@@ -7,6 +7,21 @@ vi.mock('../lib/pdf/pdfjs', () => ({
   getPageThumbnail: vi.fn(),
 }))
 
+vi.mock('../lib/images/load', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../lib/images/load')>()
+  return {
+    ...original,
+    createImageSource: vi.fn(async (file: File) => ({
+      id: `mock-image-${file.name}`,
+      kind: 'image' as const,
+      name: file.name,
+      bytes: await file.arrayBuffer(),
+      pageCount: 1,
+      mimeType: 'image/png',
+    })),
+  }
+})
+
 import { useDocumentStore } from './documentStore'
 import type { PageRef } from '../types'
 
@@ -28,6 +43,9 @@ beforeEach(() => {
     isExporting: false,
     selectedIds: [],
     lastSelectedId: null,
+    signatures: [],
+    placements: [],
+    placingSignatureId: null,
   })
 })
 
@@ -43,6 +61,9 @@ function seedPages(count: number): string[] {
     pages,
     selectedIds: [],
     lastSelectedId: null,
+    signatures: [],
+    placements: [],
+    placingSignatureId: null,
   })
   return pages.map((page) => page.id)
 }
@@ -65,23 +86,36 @@ describe('documentStore.addFiles', () => {
     expect(state.pages.every((page) => page.rotation === 0)).toBe(true)
   })
 
-  it('rejects non-pdf files without adding pages', async () => {
-    const png = new File([new Uint8Array([1, 2, 3])], 'photo.png', { type: 'image/png' })
-    await useDocumentStore.getState().addFiles([png])
+  it('rejects unsupported files without adding pages', async () => {
+    const txt = new File(['hello'], 'notes.txt', { type: 'text/plain' })
+    await useDocumentStore.getState().addFiles([txt])
 
     const state = useDocumentStore.getState()
     expect(state.pages).toHaveLength(0)
-    expect(state.error).toMatch(/Only PDF files/)
+    expect(state.error).toMatch(/Only PDF and image files/)
   })
 
   it('keeps valid files when a batch contains unsupported ones', async () => {
     const pdf = await makePdfFile('ok.pdf', 1)
-    const png = new File([new Uint8Array([1])], 'skip.png', { type: 'image/png' })
-    await useDocumentStore.getState().addFiles([pdf, png])
+    const txt = new File(['x'], 'skip.txt', { type: 'text/plain' })
+    await useDocumentStore.getState().addFiles([pdf, txt])
 
     const state = useDocumentStore.getState()
     expect(state.pages).toHaveLength(1)
-    expect(state.error).toMatch(/Skipped \(not a PDF\)/)
+    expect(state.error).toMatch(/Skipped \(supports PDF, JPG, PNG, WebP and HEIC\)/)
+  })
+
+  it('accepts images as single-page sources', async () => {
+    const png = new File([new Uint8Array([1, 2, 3])], 'photo.png', { type: 'image/png' })
+    await useDocumentStore.getState().addFiles([png])
+
+    const state = useDocumentStore.getState()
+    expect(state.error).toBeNull()
+    expect(state.pages).toHaveLength(1)
+    const source = state.sources[state.pages[0]?.sourceId ?? '']
+    expect(source?.kind).toBe('image')
+    expect(source?.mimeType).toBe('image/png')
+    expect(source?.pageCount).toBe(1)
   })
 
   it('prepends new pages when position is start', async () => {
@@ -250,5 +284,96 @@ describe('documentStore.splitDocument', () => {
   it('is a no-op without pages', async () => {
     await useDocumentStore.getState().splitDocument(2)
     expect(useDocumentStore.getState().error).toBeNull()
+  })
+})
+
+function seedSignature(): string {
+  return useDocumentStore.getState().addSignature({
+    name: 'Test signature',
+    pngBytes: new Uint8Array([1, 2, 3]).buffer,
+    width: 200,
+    height: 100,
+  })
+}
+
+describe('documentStore signatures', () => {
+  it('adds and removes signature assets', () => {
+    const store = useDocumentStore.getState()
+    const id = seedSignature()
+    expect(useDocumentStore.getState().signatures).toHaveLength(1)
+
+    store.removeSignature('missing')
+    expect(useDocumentStore.getState().signatures).toHaveLength(1)
+
+    store.removeSignature(id)
+    expect(useDocumentStore.getState().signatures).toHaveLength(0)
+  })
+
+  it('removing a signature drops its placements and place mode', () => {
+    const [page] = seedPages(2)
+    const store = useDocumentStore.getState()
+    const id = seedSignature()
+    store.setPlacingSignatureId(id)
+    store.placeSignature(page, id, { x: 0.1, y: 0.1, width: 0.3, height: 0.2 })
+
+    store.removeSignature(id)
+    const state = useDocumentStore.getState()
+    expect(state.signatures).toHaveLength(0)
+    expect(state.placements).toHaveLength(0)
+    expect(state.placingSignatureId).toBeNull()
+  })
+
+  it('places signatures with clamped rects and ignores unknown ids', () => {
+    const [page] = seedPages(1)
+    const store = useDocumentStore.getState()
+    const id = seedSignature()
+
+    store.placeSignature('missing-page', id, { x: 0, y: 0, width: 0.3, height: 0.3 })
+    store.placeSignature(page, 'missing-signature', { x: 0, y: 0, width: 0.3, height: 0.3 })
+    expect(useDocumentStore.getState().placements).toHaveLength(0)
+
+    store.placeSignature(page, id, { x: 0.9, y: -0.5, width: 0.5, height: 0.5 })
+    const [placement] = useDocumentStore.getState().placements
+    expect(placement.pageId).toBe(page)
+    expect(placement.signatureId).toBe(id)
+    expect(placement.x).toBeCloseTo(0.5, 5)
+    expect(placement.y).toBe(0)
+    expect(placement.width).toBeCloseTo(0.5, 5)
+  })
+
+  it('moves and resizes placements within bounds', () => {
+    const [page] = seedPages(1)
+    const store = useDocumentStore.getState()
+    const id = seedSignature()
+    store.placeSignature(page, id, { x: 0.1, y: 0.1, width: 0.3, height: 0.2 })
+    const [placement] = useDocumentStore.getState().placements
+
+    store.movePlacement(placement.id, 5, -5)
+    const moved = useDocumentStore.getState().placements[0]
+    expect(moved.x).toBeCloseTo(0.7, 5)
+    expect(moved.y).toBe(0)
+
+    store.resizePlacement(placement.id, 0.001, 50)
+    const resized = useDocumentStore.getState().placements[0]
+    expect(resized.width).toBeCloseTo(0.02, 5)
+    expect(resized.height).toBe(1)
+
+    store.removePlacement(placement.id)
+    expect(useDocumentStore.getState().placements).toHaveLength(0)
+  })
+
+  it('removing pages drops their placements', () => {
+    const [a, b] = seedPages(2)
+    const store = useDocumentStore.getState()
+    const id = seedSignature()
+    store.placeSignature(a, id, { x: 0, y: 0, width: 0.3, height: 0.3 })
+    store.placeSignature(b, id, { x: 0, y: 0, width: 0.3, height: 0.3 })
+
+    store.selectPage(a, 'replace')
+    store.removeSelected()
+
+    const state = useDocumentStore.getState()
+    expect(state.pages.map((page) => page.id)).toEqual([b])
+    expect(state.placements.map((placement) => placement.pageId)).toEqual([b])
   })
 })

@@ -1,5 +1,7 @@
 import { useRef } from 'react'
 
+import { IMAGE_ACCEPT } from '../lib/images/convert'
+
 interface DropZoneProps {
   onFiles: (files: File[]) => void
   isDragging: boolean
@@ -28,7 +30,7 @@ export function DropZone({ onFiles, isDragging }: DropZoneProps) {
         ref={inputRef}
         className="visually-hidden"
         type="file"
-        accept="application/pdf,.pdf"
+        accept={IMAGE_ACCEPT}
         multiple
         onChange={(event) => {
           const files = Array.from(event.target.files ?? [])
@@ -39,7 +41,7 @@ export function DropZone({ onFiles, isDragging }: DropZoneProps) {
         }}
       />
       <span className="dropzone__icon" aria-hidden="true" />
-      <p className="dropzone__title">Drop PDFs here, or click to browse</p>
+      <p className="dropzone__title">Drop PDFs or images here, or click to browse</p>
       <p className="dropzone__hint">
         Everything is processed in your browser. Nothing is uploaded.
       </p>
