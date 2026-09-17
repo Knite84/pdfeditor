@@ -1,0 +1,12 @@
+# Key Features
+- local only
+- free, no licensing concerns
+- simple UI, off-whites and dark greys, free sans-serif fonts
+- fully containerized in docker
+- slice .pdf and remove pages
+- merge .pdf to existing .pdf
+- drag and drop reordering of pages
+- images (.jpg, .png, .heic, .webp) to .pdf 
+- signatures
+- redacting text and images (basically just drawing black boxes)
+- rotate pages

@@ -1,0 +1,11 @@
+services:
+  pdf-editor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pdf-editor:local
+    container_name: pdf-editor
+    # Bind to loopback only — nothing is exposed beyond this machine.
+    ports:
+      - "127.0.0.1:8080:80"
+    restart: unless-stopped
