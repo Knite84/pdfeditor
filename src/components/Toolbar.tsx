@@ -10,6 +10,7 @@ export function Toolbar({ onSplit }: ToolbarProps) {
   const isExporting = useDocumentStore((state) => state.isExporting)
   const rotateSelected = useDocumentStore((state) => state.rotateSelected)
   const removeSelected = useDocumentStore((state) => state.removeSelected)
+  const duplicateSelected = useDocumentStore((state) => state.duplicateSelected)
   const exportSelected = useDocumentStore((state) => state.exportSelected)
   const selectAll = useDocumentStore((state) => state.selectAll)
   const clearSelection = useDocumentStore((state) => state.clearSelection)
@@ -39,6 +40,15 @@ export function Toolbar({ onSplit }: ToolbarProps) {
         title="Rotate selected pages 90 degrees clockwise"
       >
         Rotate right
+      </button>
+      <button
+        type="button"
+        className="button button--ghost"
+        disabled={selectedCount !== 1}
+        onClick={duplicateSelected}
+        title="Insert a copy of the selected page after it"
+      >
+        Duplicate
       </button>
       <button
         type="button"

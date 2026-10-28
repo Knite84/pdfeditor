@@ -83,6 +83,7 @@ interface DocumentState {
   selectAll: () => void
   clearSelection: () => void
   removeSelected: () => void
+  duplicateSelected: () => void
   rotateSelected: (degrees: number) => void
   reorderPages: (activeId: string, overId: string) => void
   signatures: SignatureAsset[]
@@ -377,6 +378,28 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         placements: state.placements.filter((placement) => !removeIds.has(placement.pageId)),
         selectedIds: [],
         lastSelectedId: null,
+      }
+    }),
+
+  duplicateSelected: () =>
+    set((state) => {
+      if (state.selectedIds.length !== 1) {
+        return {}
+      }
+      const [originalId] = state.selectedIds
+      const index = state.pages.findIndex((page) => page.id === originalId)
+      if (index === -1) {
+        return {}
+      }
+      const copy: PageRef = { ...state.pages[index], id: createId() }
+      const copiedPlacements = state.placements
+        .filter((placement) => placement.pageId === originalId)
+        .map((placement) => ({ ...placement, id: createId(), pageId: copy.id }))
+      return {
+        pages: [...state.pages.slice(0, index + 1), copy, ...state.pages.slice(index + 1)],
+        placements: [...state.placements, ...copiedPlacements],
+        selectedIds: [copy.id],
+        lastSelectedId: copy.id,
       }
     }),
 

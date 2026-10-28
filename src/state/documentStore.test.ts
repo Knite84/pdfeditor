@@ -229,6 +229,62 @@ describe('documentStore.removeSelected', () => {
   })
 })
 
+describe('documentStore.duplicateSelected', () => {
+  it('inserts a copy after the selected page and selects it', () => {
+    const [a, b] = seedPages(3)
+    const store = useDocumentStore.getState()
+    store.selectPage(b, 'replace')
+    store.rotateSelected(90)
+    store.duplicateSelected()
+
+    const state = useDocumentStore.getState()
+    expect(state.pages).toHaveLength(4)
+    const copy = state.pages[2]
+    expect(state.pages.map((page) => page.id).slice(0, 2)).toEqual([a, b])
+    expect(copy.id).not.toBe(b)
+    expect(copy).toMatchObject({ sourceId: 'source-1', sourcePageIndex: 1, rotation: 90 })
+    expect(state.pages[3].id).toBe('page-2')
+    expect(state.selectedIds).toEqual([copy.id])
+    expect(state.lastSelectedId).toBe(copy.id)
+  })
+
+  it('copies signature placements as independent placements', () => {
+    const [a] = seedPages(2)
+    const store = useDocumentStore.getState()
+    const signatureId = store.addSignature({
+      name: 'Sig',
+      pngBytes: new ArrayBuffer(8),
+      width: 100,
+      height: 40,
+    })
+    store.placeSignature(a, signatureId, { x: 0.1, y: 0.2, width: 0.3, height: 0.1 })
+    store.selectPage(a, 'replace')
+    store.duplicateSelected()
+
+    const state = useDocumentStore.getState()
+    const copyId = state.pages[1].id
+    expect(state.placements).toHaveLength(2)
+    const [original, copied] = state.placements
+    expect(copied).toMatchObject({ pageId: copyId, signatureId, x: 0.1, y: 0.2 })
+    expect(copied.id).not.toBe(original.id)
+
+    useDocumentStore.getState().movePlacement(copied.id, 0.5, 0.5)
+    expect(useDocumentStore.getState().placements[0]).toMatchObject({ x: 0.1, y: 0.2 })
+  })
+
+  it('does nothing unless exactly one page is selected', () => {
+    const [a, b] = seedPages(2)
+    const store = useDocumentStore.getState()
+    store.duplicateSelected()
+    expect(useDocumentStore.getState().pages).toHaveLength(2)
+
+    store.selectPage(a, 'replace')
+    store.selectPage(b, 'toggle')
+    store.duplicateSelected()
+    expect(useDocumentStore.getState().pages).toHaveLength(2)
+  })
+})
+
 describe('documentStore.reorderPages', () => {
   it('moves a single page to the drop position', () => {
     const [a, b, c] = seedPages(3)
